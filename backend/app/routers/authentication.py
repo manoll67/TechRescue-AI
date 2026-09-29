@@ -34,7 +34,9 @@ class AuthResponse(BaseModel):
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthResponse:
     email = str(payload.email).lower()
     if db.scalar(select(UserRecord.id).where(UserRecord.email == email)) is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Вече има профил с този имейл."
+        )
     user = UserRecord(
         email=email,
         name=payload.name,
@@ -48,7 +50,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
     except IntegrityError as error:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Email already registered"
+            status_code=status.HTTP_409_CONFLICT, detail="Вече има профил с този имейл."
         ) from error
     return AuthResponse(access_token=token, user_id=str(user.id))
 
@@ -58,7 +60,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
     email = str(payload.email).lower()
     user = db.scalar(select(UserRecord).where(UserRecord.email == email))
     if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Грешен имейл или парола.")
     purge_expired(db)
     token = issue_session(db, user.id)
     db.commit()

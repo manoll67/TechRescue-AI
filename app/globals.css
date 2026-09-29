@@ -315,6 +315,25 @@ button {
     background: #edf5ef;
 }
 
+.message-row.failed .message-bubble {
+    border-color: #e3b7b7;
+    border-style: dashed;
+    background: #fdf3f3;
+}
+
+.message-row.failed .message-bubble p {
+    color: #8a5a5a;
+}
+
+.message-failed {
+    margin-top: 6px;
+    color: #b3524f;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .message-author {
     margin-bottom: 5px;
     color: #577362;

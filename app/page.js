@@ -123,7 +123,9 @@ export default function Home() {
             return;
         }
 
-        setMessages((current) => [...current, { sender: 'user', text: `${text}\n\nСистема: ${platform}` }]);
+        const content = `${text}\n\nСистема: ${platform}`;
+        const pendingId = `user-${Date.now()}`;
+        setMessages((current) => [...current, { id: pendingId, sender: 'user', text: content }]);
         setQuestion('');
         setNotice('');
         setSending(true);
@@ -132,14 +134,18 @@ export default function Home() {
             const reply = await apiFetch('/chat/messages', {
                 method: 'POST',
                 token,
-                body: {
-                    message: `${text}\n\nСистема: ${platform}`,
-                    conversation_id: conversationId,
-                },
+                body: { message: content, conversation_id: conversationId },
             });
             setConversationId(reply.conversation_id);
             setMessages((current) => [...current, { sender: 'assistant', text: reply.answer }]);
         } catch (error) {
+            setMessages((current) =>
+                current.map((message) =>
+                    message.id === pendingId ? { ...message, failed: true } : message
+                )
+            );
+            setQuestion(text);
+
             if (error instanceof ApiError && error.status === 401) {
                 signOutLocally();
                 setNotice('Сесията изтече. Влез отново.');
@@ -210,11 +216,15 @@ export default function Home() {
 
                     <div className="chat-body" ref={chatRef} aria-live="polite">
                         {messages.map((message, index) => (
-                            <div className={`message-row ${message.sender}`} key={`${message.sender}-${index}`}>
+                            <div
+                                className={`message-row ${message.sender}${message.failed ? ' failed' : ''}`}
+                                key={message.id || `${message.sender}-${index}`}
+                            >
                                 {message.sender === 'assistant' && <span className="message-avatar" aria-hidden="true">✳</span>}
                                 <div className="message-bubble">
                                     {message.sender === 'assistant' && <div className="message-author">TechRescue <span>· помощник</span></div>}
                                     <p>{message.text}</p>
+                                    {message.failed && <div className="message-failed">Неизпратено</div>}
                                 </div>
                                 {message.sender === 'user' && <span className="user-avatar" aria-hidden="true">Т</span>}
                             </div>

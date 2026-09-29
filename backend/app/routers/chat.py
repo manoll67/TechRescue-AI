@@ -40,7 +40,7 @@ def send_message(
             )
         )
         if conversation is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Разговорът не е намерен.")
 
     answer = "Получих въпроса ти. Следващата стъпка е да уточним операционната система и точния текст на грешката."
     db.add_all(

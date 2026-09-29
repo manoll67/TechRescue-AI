@@ -28,6 +28,7 @@ def test_register_normalizes_email_and_rejects_duplicates(client: TestClient) ->
     register(client, email="Ana@Example.com")
     duplicate = client.post("/api/v1/auth/register", json=CREDENTIALS)
     assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "Вече има профил с този имейл."
     login = client.post(
         "/api/v1/auth/login",
         json={"email": "ANA@EXAMPLE.COM", "password": CREDENTIALS["password"]},
@@ -41,6 +42,7 @@ def test_login_rejects_wrong_password(client: TestClient) -> None:
         "/api/v1/auth/login", json={"email": CREDENTIALS["email"], "password": "wrongpassword"}
     )
     assert response.status_code == 401
+    assert response.json()["detail"] == "Грешен имейл или парола."
 
 
 def test_protected_routes_require_a_valid_token(client: TestClient) -> None:
