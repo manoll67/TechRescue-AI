@@ -1,15 +1,14 @@
-import hashlib
-from secrets import token_urlsafe
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..core.security import hash_password, verify_password
 from ..core.database import get_db
 from ..core.models import AuthSession, UserRecord
+from ..core.security import hash_password, verify_password
+from ..core.sessions import hash_token, issue_session, purge_expired
+from ..dependencies import get_bearer_token
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -41,11 +40,10 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
         name=payload.name,
         password_hash=hash_password(payload.password),
     )
-    token = token_urlsafe(32)
     try:
         db.add(user)
         db.flush()
-        db.add(AuthSession(token_hash=hashlib.sha256(token.encode()).hexdigest(), user_id=user.id))
+        token = issue_session(db, user.id)
         db.commit()
     except IntegrityError as error:
         db.rollback()
@@ -61,7 +59,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
     user = db.scalar(select(UserRecord).where(UserRecord.email == email))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = token_urlsafe(32)
-    db.add(AuthSession(token_hash=hashlib.sha256(token.encode()).hexdigest(), user_id=user.id))
+    purge_expired(db)
+    token = issue_session(db, user.id)
     db.commit()
     return AuthResponse(access_token=token, user_id=str(user.id))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(token: str = Depends(get_bearer_token), db: Session = Depends(get_db)) -> Response:
+    db.execute(delete(AuthSession).where(AuthSession.token_hash == hash_token(token)))
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000"]
     database_url: str = "postgresql+psycopg://techrescue:techrescue@localhost:5432/techrescue"
+    session_ttl_hours: int = 24 * 7
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="TECHRESCUE_")
 

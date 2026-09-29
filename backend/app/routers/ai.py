@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..dependencies import get_current_user
 from ..core.models import UserRecord
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/ai", tags=["AI"])
 
@@ -21,5 +21,9 @@ class DiagnoseResponse(BaseModel):
 def diagnose(payload: DiagnoseRequest, _: UserRecord = Depends(get_current_user)) -> DiagnoseResponse:
     return DiagnoseResponse(
         summary=f"Подготвена е базова диагностика за {payload.operating_system}.",
-        steps=["Провери точния текст на грешката.", "Опиши какво се е променило преди проблема.", "Не изпълнявай команди с неизвестен произход."],
+        steps=[
+            "Провери точния текст на грешката.",
+            "Опиши какво се е променило преди проблема.",
+            "Не изпълнявай команди с неизвестен произход.",
+        ],
     )

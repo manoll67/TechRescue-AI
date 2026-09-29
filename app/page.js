@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import { ApiError, apiFetch } from './lib/api';
+
+const TOKEN_STORAGE_KEY = 'techrescue.token';
 
 const suggestions = [
     { icon: '▧', label: 'Windows', prompt: 'Компютърът ми с Windows работи много бавно.' },
@@ -14,13 +18,30 @@ const initialMessage = {
     text: 'Здравей! Аз съм TechRescue. Опиши какво се случва с компютъра ти и ще ти помогна да подредиш следващите стъпки.',
 };
 
+const emptyAuthForm = { email: '', name: '', password: '' };
+
 export default function Home() {
     const [messages, setMessages] = useState([initialMessage]);
     const [question, setQuestion] = useState('');
     const [platform, setPlatform] = useState('Windows');
     const [notice, setNotice] = useState('');
+    const [token, setToken] = useState(null);
+    const [user, setUser] = useState(null);
+    const [authMode, setAuthMode] = useState('login');
+    const [authForm, setAuthForm] = useState(emptyAuthForm);
+    const [authError, setAuthError] = useState('');
+    const [authBusy, setAuthBusy] = useState(false);
+    const [conversationId, setConversationId] = useState(null);
+    const [sending, setSending] = useState(false);
     const inputRef = useRef(null);
     const chatRef = useRef(null);
+
+    const signOutLocally = useCallback(() => {
+        window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setToken(null);
+        setUser(null);
+        setConversationId(null);
+    }, []);
 
     useEffect(() => {
         if (chatRef.current) {
@@ -28,7 +49,62 @@ export default function Home() {
         }
     }, [messages]);
 
-    function sendMessage(event) {
+    useEffect(() => {
+        const stored = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+
+        if (!stored) {
+            return;
+        }
+
+        apiFetch('/users/me', { token: stored })
+            .then((profile) => {
+                setToken(stored);
+                setUser(profile);
+            })
+            .catch(() => {
+                signOutLocally();
+            });
+    }, [signOutLocally]);
+
+    async function submitAuth(event) {
+        event.preventDefault();
+        setAuthError('');
+        setAuthBusy(true);
+
+        const body =
+            authMode === 'register'
+                ? { email: authForm.email, name: authForm.name, password: authForm.password }
+                : { email: authForm.email, password: authForm.password };
+
+        try {
+            const auth = await apiFetch(`/auth/${authMode}`, { method: 'POST', body });
+            window.localStorage.setItem(TOKEN_STORAGE_KEY, auth.access_token);
+            const profile = await apiFetch('/users/me', { token: auth.access_token });
+            setToken(auth.access_token);
+            setUser(profile);
+            setAuthForm(emptyAuthForm);
+            setNotice('');
+            inputRef.current?.focus();
+        } catch (error) {
+            setAuthError(error instanceof ApiError ? error.message : 'Неуспешен опит за вход.');
+        } finally {
+            setAuthBusy(false);
+        }
+    }
+
+    async function signOut() {
+        try {
+            await apiFetch('/auth/logout', { method: 'POST', token });
+        } catch {
+            // Сесията се изчиства локално дори ако заявката не мине.
+        }
+
+        signOutLocally();
+        setMessages([initialMessage]);
+        setNotice('');
+    }
+
+    async function sendMessage(event) {
         event.preventDefault();
         const text = question.trim();
 
@@ -38,9 +114,41 @@ export default function Home() {
             return;
         }
 
-        setMessages((current) => [...current, { sender: 'user', text }]);
+        if (!token) {
+            setNotice('Влез в профила си, за да изпратиш съобщение.');
+            return;
+        }
+
+        if (sending) {
+            return;
+        }
+
+        setMessages((current) => [...current, { sender: 'user', text: `${text}\n\nСистема: ${platform}` }]);
         setQuestion('');
-        setNotice('Съобщението е добавено в демо интерфейса. AI услугата ще бъде свързана в следващ етап.');
+        setNotice('');
+        setSending(true);
+
+        try {
+            const reply = await apiFetch('/chat/messages', {
+                method: 'POST',
+                token,
+                body: {
+                    message: `${text}\n\nСистема: ${platform}`,
+                    conversation_id: conversationId,
+                },
+            });
+            setConversationId(reply.conversation_id);
+            setMessages((current) => [...current, { sender: 'assistant', text: reply.answer }]);
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 401) {
+                signOutLocally();
+                setNotice('Сесията изтече. Влез отново.');
+            } else {
+                setNotice(error instanceof ApiError ? error.message : 'Съобщението не беше изпратено.');
+            }
+        } finally {
+            setSending(false);
+        }
     }
 
     function useSuggestion(prompt) {
@@ -53,6 +161,7 @@ export default function Home() {
         setMessages([initialMessage]);
         setQuestion('');
         setNotice('');
+        setConversationId(null);
     }
 
     return (
@@ -68,7 +177,7 @@ export default function Home() {
                     <span className="brand-name">tech<span>rescue</span></span>
                 </a>
                 <div className="topbar-right">
-                    <span className="stage-tag"><span className="status-dot" /> Frontend демо</span>
+                    <span className="stage-tag"><span className="status-dot" /> Свързан с API</span>
                     <a className="top-link" href="#how-it-works">Как работи</a>
                 </div>
             </header>
@@ -159,8 +268,8 @@ export default function Home() {
                                     </button>
                                 ))}
                             </div>
-                            <button className="send-button" type="submit" aria-label="Изпрати съобщение">
-                                <span>Изпрати</span>
+                            <button className="send-button" type="submit" aria-label="Изпрати съобщение" disabled={sending}>
+                                <span>{sending ? 'Изпращане...' : 'Изпрати'}</span>
                                 <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 10h12m-5-5 5 5-5 5" /></svg>
                             </button>
                         </div>
@@ -170,6 +279,67 @@ export default function Home() {
                 </div>
 
                 <aside className="side-panel">
+                    <div className="side-card account-card">
+                        {user ? (
+                            <>
+                                <h2>Здравей, {user.name}</h2>
+                                <p>{user.email}</p>
+                                <button className="auth-submit" type="button" onClick={signOut}>Изход</button>
+                            </>
+                        ) : (
+                            <>
+                                <h2>{authMode === 'login' ? 'Вход' : 'Регистрация'}</h2>
+                                <p>Влез, за да запазваш разговорите си.</p>
+                                <form className="auth-form" onSubmit={submitAuth}>
+                                    {authMode === 'register' && (
+                                        <input
+                                            type="text"
+                                            name="name"
+                                            placeholder="Име"
+                                            autoComplete="name"
+                                            required
+                                            minLength={2}
+                                            value={authForm.name}
+                                            onChange={(event) => setAuthForm({ ...authForm, name: event.target.value })}
+                                        />
+                                    )}
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        placeholder="Имейл"
+                                        autoComplete="email"
+                                        required
+                                        value={authForm.email}
+                                        onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })}
+                                    />
+                                    <input
+                                        type="password"
+                                        name="password"
+                                        placeholder="Парола"
+                                        autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
+                                        required
+                                        minLength={8}
+                                        value={authForm.password}
+                                        onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })}
+                                    />
+                                    <button className="auth-submit" type="submit" disabled={authBusy}>
+                                        {authMode === 'login' ? 'Влез' : 'Създай профил'}
+                                    </button>
+                                </form>
+                                {authError && <p className="notice" role="alert">{authError}</p>}
+                                <button
+                                    className="auth-switch"
+                                    type="button"
+                                    onClick={() => {
+                                        setAuthMode(authMode === 'login' ? 'register' : 'login');
+                                        setAuthError('');
+                                    }}
+                                >
+                                    {authMode === 'login' ? 'Нямаш профил? Регистрирай се' : 'Вече имаш профил? Влез'}
+                                </button>
+                            </>
+                        )}
+                    </div>
                     <div className="side-card trust-card">
                         <div className="side-card-icon green-icon" aria-hidden="true">✓</div>
                         <h2>Помощ, на която можеш да разчиташ</h2>
@@ -187,7 +357,7 @@ export default function Home() {
                             <li><span>3</span><div><strong>Следвай насоките</strong><small>Ще започнем от безопасните стъпки.</small></div></li>
                         </ol>
                     </div>
-                    <div className="demo-card"><span className="demo-sparkle" aria-hidden="true">✳</span><p><strong>Предстои свързване с AI</strong><br />Това е първа версия на интерфейса. AI услугата ще се добави в следващ етап.</p></div>
+                    <div className="demo-card"><span className="demo-sparkle" aria-hidden="true">✳</span><p><strong>Предстои свързване с AI модел</strong><br />Разговорите вече се записват в backend-а; отговорите засега са шаблонни.</p></div>
                 </aside>
             </section>
 

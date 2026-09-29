@@ -1,11 +1,13 @@
-from uuid import uuid4
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from ..core.database import get_db
+from ..core.models import Article, UserRecord
 from ..dependencies import require_admin
-from ..core.models import UserRecord
-from ..core.store import knowledge_articles
 
 router = APIRouter(prefix="/knowledge-base", tags=["knowledge base"])
 
@@ -16,13 +18,38 @@ class ArticleCreate(BaseModel):
     category: str = Field(min_length=2, max_length=80)
 
 
-@router.get("")
-def list_articles() -> list[dict]:
-    return knowledge_articles
+class ArticleResponse(BaseModel):
+    id: str
+    title: str
+    content: str
+    category: str
+    created_at: datetime
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_article(payload: ArticleCreate, _: UserRecord = Depends(require_admin)) -> dict:
-    article = {"id": str(uuid4()), **payload.model_dump()}
-    knowledge_articles.append(article)
-    return article
+def serialize(article: Article) -> ArticleResponse:
+    return ArticleResponse(
+        id=str(article.id),
+        title=article.title,
+        content=article.content,
+        category=article.category,
+        created_at=article.created_at,
+    )
+
+
+@router.get("", response_model=list[ArticleResponse])
+def list_articles(db: Session = Depends(get_db)) -> list[ArticleResponse]:
+    articles = db.scalars(select(Article).order_by(Article.created_at.desc())).all()
+    return [serialize(article) for article in articles]
+
+
+@router.post("", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
+def create_article(
+    payload: ArticleCreate,
+    _: UserRecord = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> ArticleResponse:
+    article = Article(title=payload.title, content=payload.content, category=payload.category)
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+    return serialize(article)

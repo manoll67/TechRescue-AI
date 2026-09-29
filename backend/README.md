@@ -20,7 +20,7 @@ API документацията е достъпна на `http://localhost:8000
 
 ## Начален API обхват
 
-- `authentication` — регистрация и вход с bearer session token
+- `authentication` — регистрация, вход и изход (`POST /api/v1/auth/logout`) с bearer session token
 - `users` — текущ профил
 - `chat` — защитени чат съобщения
 - `AI` — базова диагностика
@@ -31,4 +31,19 @@ API документацията е достъпна на `http://localhost:8000
 
 Потребителските профили, хешовете на сесиите, разговорите и съобщенията се съхраняват в PostgreSQL.
 Таблиците `conversations` и `messages` са свързани с външни ключове; разговорите са достъпни само от собственика им.
-Базовият план за абонамент се пази в `users.subscription`. Данните за билетите и базата знания остават in-memory.
+Базовият план за абонамент се пази в `users.subscription`. Билетите (`tickets`) и статиите в базата знания
+(`knowledge_articles`) също се съхраняват в PostgreSQL.
+
+Сесиите имат срок на валидност (`auth_sessions.expires_at`), който се конфигурира с
+`TECHRESCUE_SESSION_TTL_HOURS` (по подразбиране 168 часа). Изтеклите сесии се изчистват при вход и
+връщат 401 при използване; logout изтрива сесията незабавно.
+
+## Тестове
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+pytest
+```
+
+Тестовете използват in-memory SQLite и не изискват PostgreSQL.

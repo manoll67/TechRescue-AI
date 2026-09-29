@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..dependencies import get_current_user
 from ..core.database import get_db
 from ..core.models import Conversation, Message, UserRecord
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 

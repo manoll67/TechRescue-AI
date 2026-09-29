@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from ..dependencies import get_current_user
 from ..core.database import get_db
 from ..core.models import UserRecord
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 

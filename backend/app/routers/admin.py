@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..dependencies import require_admin
 from ..core.database import get_db
 from ..core.models import UserRecord
+from ..dependencies import require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
