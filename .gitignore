@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+
+__pycache__/
+*.pyc
+.ruff_cache/
+backend/source/
+backend/*.db
+.vscode/
